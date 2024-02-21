@@ -1,36 +1,12 @@
 import { Construct } from "constructs";
-import { TerraformOutput, TerraformStack, TerraformVariable } from "cdktf";
-import { AwsProvider } from "@cdktf/provider-aws/lib/provider";
+import { TerraformOutput, TerraformStack } from "cdktf";
 import { IamGroup } from "@cdktf/provider-aws/lib/iam-group";
 import { DataAwsIamPolicy } from "@cdktf/provider-aws/lib/data-aws-iam-policy";
 import { IamGroupPolicyAttachment } from "@cdktf/provider-aws/lib/iam-group-policy-attachment";
 import { IamUser } from "@cdktf/provider-aws/lib/iam-user";
 import { IamUserLoginProfile } from "@cdktf/provider-aws/lib/iam-user-login-profile";
 import { IamUserGroupMembership } from "@cdktf/provider-aws/lib/iam-user-group-membership";
-
-export class Aws extends Construct {
-  constructor(scope: Construct, id: string, region?: string) {
-    super(scope, id);
-
-    region ??= new TerraformVariable(scope, "aws-region", {
-      nullable: false,
-    }).value;
-
-    const accessKey = new TerraformVariable(scope, "aws-access-key", {
-      sensitive: true,
-    });
-
-    const secretKey = new TerraformVariable(scope, "aws-secret-key", {
-      sensitive: true,
-    });
-
-    new AwsProvider(this, `${id}-provider`, {
-      region,
-      accessKey: accessKey.value,
-      secretKey: secretKey.value,
-    });
-  }
-}
+import { Aws } from "../resources/aws";
 
 export class SystemStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
