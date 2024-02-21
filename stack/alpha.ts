@@ -10,6 +10,9 @@ import { Instance } from "@cdktf/provider-aws/lib/instance";
 import { DataAwsAmi } from "@cdktf/provider-aws/lib/data-aws-ami";
 import { KeyPair } from "@cdktf/provider-aws/lib/key-pair";
 import { Ec2InstanceState } from "@cdktf/provider-aws/lib/ec2-instance-state";
+import { VpcSecurityGroupIngressRule } from "@cdktf/provider-aws/lib/vpc-security-group-ingress-rule";
+import { VpcSecurityGroupEgressRule } from "@cdktf/provider-aws/lib/vpc-security-group-egress-rule";
+import { SecurityGroup } from "@cdktf/provider-aws/lib/security-group";
 
 export class AlphaStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
@@ -45,20 +48,46 @@ export class AlphaStack extends TerraformStack {
     });
 
     const nodeInitScript = `
-      #!/bin/bash
+      #! /bin/bash
       apt-get update
       apt-get install -y nginx
       systemctl start nginx
       systemctl enable nginx
       echo "Hello, World!" | tee /var/www/html/index.html
-    `;
+    `.trim();
+
+    const tcpPorts = TerraformIterator.fromMap({
+      http: {
+        port: 80,
+      },
+      https: {
+        port: 443,
+      },
+      ssh: { port: 22 },
+    });
+
+    const nodeSg = new SecurityGroup(this, "node-sg", {});
+
+    new VpcSecurityGroupIngressRule(this, "node-ingress", {
+      forEach: tcpPorts,
+      ipProtocol: "tcp",
+      fromPort: tcpPorts.getNumber("port"),
+      toPort: tcpPorts.getNumber("port"),
+      cidrIpv4: "0.0.0.0/0",
+      securityGroupId: nodeSg.id,
+    });
+
+    new VpcSecurityGroupEgressRule(this, "node-egress", {
+      ipProtocol: "-1",
+      securityGroupId: nodeSg.id,
+      cidrIpv4: "0.0.0.0/0",
+    });
 
     const instance = new Instance(this, "node", {
       forEach: instanceDefs,
       ami: ubuntuAmi.value,
       instanceType: instanceDefs.getString("instanceType"),
       keyName: sshkey.keyName,
-      associatePublicIpAddress: true,
       ebsBlockDevice: [
         {
           deviceName: "/dev/sda1",
@@ -68,13 +97,14 @@ export class AlphaStack extends TerraformStack {
         },
       ],
       userData: nodeInitScript,
+      vpcSecurityGroupIds: [nodeSg.id],
     });
 
     const instances = TerraformIterator.fromResources(instance);
 
     new Ec2InstanceState(this, "node-state", {
       forEach: instances,
-      state: "stopped",
+      state: "running",
       instanceId: instances.getString("id"),
     });
 
