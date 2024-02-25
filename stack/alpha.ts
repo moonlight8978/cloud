@@ -13,6 +13,11 @@ import { Ec2InstanceState } from "@cdktf/provider-aws/lib/ec2-instance-state";
 import { VpcSecurityGroupIngressRule } from "@cdktf/provider-aws/lib/vpc-security-group-ingress-rule";
 import { VpcSecurityGroupEgressRule } from "@cdktf/provider-aws/lib/vpc-security-group-egress-rule";
 import { SecurityGroup } from "@cdktf/provider-aws/lib/security-group";
+import { IamRole } from "@cdktf/provider-aws/lib/iam-role";
+import { DataAwsIamPolicyDocument } from "@cdktf/provider-aws/lib/data-aws-iam-policy-document";
+import { IamInstanceProfile } from "@cdktf/provider-aws/lib/iam-instance-profile";
+import { IamPolicy } from "@cdktf/provider-aws/lib/iam-policy";
+import { IamRolePolicyAttachment } from "@cdktf/provider-aws/lib/iam-role-policy-attachment";
 
 export class AlphaStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
@@ -54,6 +59,11 @@ export class AlphaStack extends TerraformStack {
       systemctl start nginx
       systemctl enable nginx
       echo "Hello, World!" | tee /var/www/html/index.html
+
+      apt-get install -y unzip zip
+      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      unzip awscliv2.zip
+      ./aws/install
     `.trim();
 
     const tcpPorts = TerraformIterator.fromMap({
@@ -83,6 +93,56 @@ export class AlphaStack extends TerraformStack {
       cidrIpv4: "0.0.0.0/0",
     });
 
+    const ec2RolePolicyData = new DataAwsIamPolicyDocument(
+      this,
+      "ec2-role-policy-data",
+      {
+        statement: [
+          {
+            actions: ["sts:AssumeRole"],
+            effect: "Allow",
+            principals: [
+              {
+                type: "Service",
+                identifiers: ["ec2.amazonaws.com"],
+              },
+            ],
+          },
+        ],
+      }
+    );
+
+    const nodeRole = new IamRole(this, "node-role", {
+      assumeRolePolicy: ec2RolePolicyData.json,
+    });
+
+    const nodePolicyDocument = new DataAwsIamPolicyDocument(
+      this,
+      "node-policy-data",
+      {
+        statement: [
+          {
+            effect: "Allow",
+            actions: ["ec2:Describe*"],
+            resources: ["*"],
+          },
+        ],
+      }
+    );
+
+    const nodePolicy = new IamPolicy(this, "node-policy", {
+      policy: nodePolicyDocument.json,
+    });
+
+    new IamRolePolicyAttachment(this, "node-role-policy", {
+      role: nodeRole.name,
+      policyArn: nodePolicy.arn,
+    });
+
+    const nodeProfile = new IamInstanceProfile(this, "node-profile", {
+      role: nodeRole.name,
+    });
+
     const instance = new Instance(this, "node", {
       forEach: instanceDefs,
       ami: ubuntuAmi.value,
@@ -98,13 +158,14 @@ export class AlphaStack extends TerraformStack {
       ],
       userData: nodeInitScript,
       vpcSecurityGroupIds: [nodeSg.id],
+      iamInstanceProfile: nodeProfile.name,
     });
 
     const instances = TerraformIterator.fromResources(instance);
 
     new Ec2InstanceState(this, "node-state", {
       forEach: instances,
-      state: "running",
+      state: "stopped",
       instanceId: instances.getString("id"),
     });
 
