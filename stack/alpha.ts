@@ -1,12 +1,16 @@
 import {
+  Fn,
+  Op,
   TerraformIterator,
   TerraformOutput,
   TerraformStack,
   TerraformVariable,
+  Token,
 } from "cdktf";
 import { Construct } from "constructs";
 import { Aws } from "../resources/aws";
 import { Instance } from "@cdktf/provider-aws/lib/instance";
+import { EbsVolume } from "@cdktf/provider-aws/lib/ebs-volume";
 import { DataAwsAmi } from "@cdktf/provider-aws/lib/data-aws-ami";
 import { KeyPair } from "@cdktf/provider-aws/lib/key-pair";
 import { Ec2InstanceState } from "@cdktf/provider-aws/lib/ec2-instance-state";
@@ -18,6 +22,7 @@ import { DataAwsIamPolicyDocument } from "@cdktf/provider-aws/lib/data-aws-iam-p
 import { IamInstanceProfile } from "@cdktf/provider-aws/lib/iam-instance-profile";
 import { IamPolicy } from "@cdktf/provider-aws/lib/iam-policy";
 import { IamRolePolicyAttachment } from "@cdktf/provider-aws/lib/iam-role-policy-attachment";
+import { VolumeAttachment } from "@cdktf/provider-aws/lib/volume-attachment";
 
 export class AlphaStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
@@ -26,6 +31,10 @@ export class AlphaStack extends TerraformStack {
     new Aws(this, "aws");
 
     const ubuntuAmi = new TerraformVariable(this, "ubuntu-2204-ami", {
+      nullable: false,
+    });
+
+    const az = new TerraformVariable(this, "alpha-az", {
       nullable: false,
     });
 
@@ -42,9 +51,9 @@ export class AlphaStack extends TerraformStack {
     }).id;
 
     const instanceDefs = TerraformIterator.fromMap({
-      0: {
-        instanceType: "t2.micro",
-      },
+      // 0: {
+      //   instanceType: "t2.micro",
+      // },
     });
 
     const sshkey = new KeyPair(this, "node-keypair", {
@@ -143,10 +152,24 @@ export class AlphaStack extends TerraformStack {
       role: nodeRole.name,
     });
 
+    const cacheEbs = new EbsVolume(this, "cache-ebs", {
+      forEach: instanceDefs,
+      size: 1,
+      type: "gp2",
+      availabilityZone: az.value,
+    });
+
+    const cacheEbses = TerraformIterator.fromResources(cacheEbs);
+
+    new TerraformOutput(this, "cache-ebs-id-output", {
+      value: cacheEbses.pluckProperty("id"),
+    });
+
     const instance = new Instance(this, "node", {
       forEach: instanceDefs,
       ami: ubuntuAmi.value,
       instanceType: instanceDefs.getString("instanceType"),
+      availabilityZone: az.value,
       keyName: sshkey.keyName,
       ebsBlockDevice: [
         {
@@ -163,9 +186,19 @@ export class AlphaStack extends TerraformStack {
 
     const instances = TerraformIterator.fromResources(instance);
 
+    new VolumeAttachment(this, "node-cache-ebs-attachment", {
+      forEach: instances,
+      instanceId: instances.getString("id"),
+      volumeId: Fn.element(
+        Token.asList(cacheEbses.pluckProperty("id")),
+        instances.key
+      ),
+      deviceName: "/dev/sdf",
+    });
+
     new Ec2InstanceState(this, "node-state", {
       forEach: instances,
-      state: "stopped",
+      state: "running",
       instanceId: instances.getString("id"),
     });
 
