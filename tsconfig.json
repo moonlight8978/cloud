@@ -21,7 +21,12 @@
     "stripInternal": true,
     "target": "ES2018",
     "incremental": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": "./",
+    "paths": {
+      "@resources/*": ["./resources/*"],
+      "@stacks/*": ["./stacks/*"]
+    }
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "cdktf.out"]

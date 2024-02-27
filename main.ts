@@ -1,16 +1,13 @@
+import "module-alias/register";
 import { App, CloudBackend, NamedCloudWorkspace } from "cdktf";
-import { SystemStack } from "./stack/sys";
-import { AlphaStack } from "./stack/alpha";
+import { SystemStack } from "./stacks/sys";
+import { AlphaStack } from "./stacks/alpha";
+import { AlphaNetworkStack } from "@stacks/alpha/network";
 
 const app = new App();
-const system = new SystemStack(app, "sys");
+new SystemStack(app, "sys");
 const alpha = new AlphaStack(app, "alpha");
-
-new CloudBackend(system, {
-  hostname: "app.terraform.io",
-  organization: "moonlight8978",
-  workspaces: new NamedCloudWorkspace("cloud-sys", "cloud"),
-});
+const network = new AlphaNetworkStack(app);
 
 new CloudBackend(alpha, {
   hostname: "app.terraform.io",
