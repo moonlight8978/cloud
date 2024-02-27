@@ -22,20 +22,25 @@ import { IamInstanceProfile } from "@cdktf/provider-aws/lib/iam-instance-profile
 import { IamPolicy } from "@cdktf/provider-aws/lib/iam-policy";
 import { IamRolePolicyAttachment } from "@cdktf/provider-aws/lib/iam-role-policy-attachment";
 import { VolumeAttachment } from "@cdktf/provider-aws/lib/volume-attachment";
+import { MoonLightTerraformBackend } from "@resources/backend";
+import { AlphaVars } from "./vars";
+import { AlphaNetworkData } from "./network";
 
-export class AlphaStack extends TerraformStack {
-  constructor(scope: Construct, id: string) {
-    super(scope, id);
+export class AlphaLandingPageStack extends TerraformStack {
+  constructor(scope: Construct) {
+    super(scope, "alpha-landing-page");
 
+    new MoonLightTerraformBackend(this, "alpha-landing-page");
     new Aws(this, "aws");
+    const vars = new AlphaVars(this);
+    const network = new AlphaNetworkData(this);
 
-    const ubuntuAmi = new TerraformVariable(this, "ubuntu-2204-ami", {
-      nullable: false,
-    });
-
-    const az = new TerraformVariable(this, "alpha-az", {
-      nullable: false,
-    });
+    const vpc = network.vpc;
+    const subnet = network.getSubnet(
+      "node-subnet",
+      "pub",
+      vars.landingPageAz.value
+    );
 
     new DataAwsAmi(this, "data-ami-ubuntu", {
       filter: [
@@ -49,11 +54,7 @@ export class AlphaStack extends TerraformStack {
       mostRecent: true,
     }).id;
 
-    const instanceDefs = TerraformIterator.fromMap({
-      // 0: {
-      //   instanceType: "t2.micro",
-      // },
-    });
+    const instanceDefs = TerraformIterator.fromMap(vars.landingPageNodes.value);
 
     const sshkey = new KeyPair(this, "node-keypair", {
       publicKey:
@@ -84,7 +85,9 @@ export class AlphaStack extends TerraformStack {
       ssh: { port: 22 },
     });
 
-    const nodeSg = new SecurityGroup(this, "node-sg", {});
+    const nodeSg = new SecurityGroup(this, "node-sg", {
+      vpcId: Token.asString(vpc.id),
+    });
 
     new VpcSecurityGroupIngressRule(this, "node-ingress", {
       forEach: tcpPorts,
@@ -155,7 +158,7 @@ export class AlphaStack extends TerraformStack {
       forEach: instanceDefs,
       size: 1,
       type: "gp2",
-      availabilityZone: az.value,
+      availabilityZone: vars.landingPageAz.value,
     });
 
     const cacheEbses = TerraformIterator.fromResources(cacheEbs);
@@ -166,9 +169,9 @@ export class AlphaStack extends TerraformStack {
 
     const instance = new Instance(this, "node", {
       forEach: instanceDefs,
-      ami: ubuntuAmi.value,
+      ami: vars.landingPageUbuntuAmi.value,
       instanceType: instanceDefs.getString("instanceType"),
-      availabilityZone: az.value,
+      availabilityZone: vars.landingPageAz.value,
       keyName: sshkey.keyName,
       ebsBlockDevice: [
         {
@@ -181,6 +184,7 @@ export class AlphaStack extends TerraformStack {
       userData: nodeInitScript,
       vpcSecurityGroupIds: [nodeSg.id],
       iamInstanceProfile: nodeProfile.name,
+      subnetId: subnet.id,
     });
 
     const instances = TerraformIterator.fromResources(instance);
@@ -199,10 +203,6 @@ export class AlphaStack extends TerraformStack {
       forEach: instances,
       state: "running",
       instanceId: instances.getString("id"),
-    });
-
-    new TerraformOutput(this, "ami-output", {
-      value: ubuntuAmi,
     });
 
     new TerraformOutput(this, "node-public-ip", {

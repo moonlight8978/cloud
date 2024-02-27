@@ -16,3 +16,4 @@ secret.auto.tfvars
 config/local.yml
 
 .vscode/
+test.tf
