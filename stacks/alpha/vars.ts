@@ -35,6 +35,18 @@ export class AlphaVars extends Construct {
     type: "map(object({ instanceType = string }))",
   });
 
+  public landingPageNodeSshPub = this.createVar("landing-page-node-ssh-pub", {
+    nullable: false,
+    sensitive: true,
+    type: "string",
+  });
+
+  public landingPageNodeSshPriv = this.createVar("landing-page-node-ssh-priv", {
+    nullable: false,
+    sensitive: true,
+    type: "string",
+  });
+
   constructor(private scope: Construct) {
     super(scope, "alpha");
   }

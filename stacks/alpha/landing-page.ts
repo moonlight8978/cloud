@@ -3,7 +3,6 @@ import {
   TerraformIterator,
   TerraformOutput,
   TerraformStack,
-  TerraformVariable,
   Token,
 } from "cdktf";
 import { Construct } from "constructs";
@@ -57,8 +56,7 @@ export class AlphaLandingPageStack extends TerraformStack {
     const instanceDefs = TerraformIterator.fromMap(vars.landingPageNodes.value);
 
     const sshkey = new KeyPair(this, "node-keypair", {
-      publicKey:
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBV+J3TZuGuF1smz9/MWhXSP5hiRaY8fQsBFiENa7xxw alpha-node",
+      publicKey: vars.landingPageNodeSshPub.stringValue,
     });
 
     const nodeInitScript = `

@@ -9,6 +9,8 @@ alpha-landing-page-nodes = {
   #   instanceType = "t2.micro"
   # }
 }
+# alpha-landing-page-node-ssh-pub  = ""
+# alpha-landing-page-node-ssh-priv = ""
 
 alpha-cidr = "10.0.0.0/16"
 alpha-subnets = [
